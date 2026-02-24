@@ -1,0 +1,151 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 40 20% 92%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 40 20% 92%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 220 20% 6%;
+
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 40 20% 92%;
+
+    --muted: 220 14% 14%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 20% 6%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 38 92% 50%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 40 20% 92%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 14% 14%;
+    --sidebar-accent-foreground: 40 20% 92%;
+    --sidebar-border: 220 14% 18%;
+    --sidebar-ring: 38 92% 50%;
+
+    /* Custom tokens */
+    --gold: 38 92% 50%;
+    --gold-light: 40 85% 65%;
+    --gold-dark: 35 90% 38%;
+    --surface-glass: 220 18% 12%;
+    --surface-elevated: 220 16% 14%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: hsl(var(--surface-glass) / 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, hsl(var(--gold-dark)), hsl(var(--gold)), hsl(var(--gold-light)));
+  }
+
+  .gold-text {
+    background: linear-gradient(135deg, hsl(var(--gold)), hsl(var(--gold-light)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gold-glow {
+    box-shadow: 0 0 30px hsl(var(--gold) / 0.15), 0 0 60px hsl(var(--gold) / 0.05);
+  }
+
+  .card-hover {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px hsl(var(--gold) / 0.1), 0 0 0 1px hsl(var(--gold) / 0.2);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 font-semibold rounded-lg transition-all duration-200;
+    background: linear-gradient(135deg, hsl(var(--gold-dark)), hsl(var(--gold)));
+    color: hsl(var(--background));
+  }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, hsl(var(--gold)), hsl(var(--gold-light)));
+    box-shadow: 0 8px 24px hsl(var(--gold) / 0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-outline {
+    @apply px-6 py-3 font-semibold rounded-lg transition-all duration-200;
+    border: 1px solid hsl(var(--gold) / 0.4);
+    color: hsl(var(--gold));
+    background: transparent;
+  }
+  .btn-outline:hover {
+    border-color: hsl(var(--gold));
+    background: hsl(var(--gold) / 0.08);
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-lg text-sm transition-all duration-200;
+    background: hsl(var(--surface-glass));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    outline: none;
+  }
+  .input-field::placeholder {
+    color: hsl(var(--muted-foreground));
+  }
+  .input-field:focus {
+    border-color: hsl(var(--gold) / 0.5);
+    box-shadow: 0 0 0 3px hsl(var(--gold) / 0.1);
+  }
+
+  .status-pill {
+    @apply text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full;
+    background: hsl(var(--gold) / 0.15);
+    color: hsl(var(--gold-light));
+    border: 1px solid hsl(var(--gold) / 0.25);
+  }
+
+  .section-title {
+    @apply text-3xl font-bold tracking-tight;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
