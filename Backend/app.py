@@ -46,7 +46,7 @@ download_models()
 
 app = Flask(__name__)
 CORS(app, origins=[
-    "https://auto-4ud8xh4rz-mrigankabhisheks-projects.vercel.app/",
+    "https://auto-bid-mrigankabhisheks-projects.vercel.app/",
     "http://localhost:5173"
 ])
 
@@ -95,16 +95,27 @@ def build_damage_model(num_classes):
         include_top=False,
         input_shape=(IMG_SIZE, IMG_SIZE, 3)
     )
+
     base_model.trainable = False
+
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = Dropout(0.4)(x)
     outputs = Dense(num_classes, activation='softmax')(x)
+
     return Model(inputs=base_model.input, outputs=outputs)
 
-damage_model = build_damage_model(len(damage_class_map))
-damage_model.load_weights("damage_classifier.weights.h5")
+
+# LOAD CLASS MAP
+with open("damage_class_indices.json", "r") as f:
+    damage_class_map = json.load(f)
+
 damage_classes = list(damage_class_map.keys())
+
+# BUILD + LOAD WEIGHTS
+damage_model = build_damage_model(len(damage_classes))
+damage_model.load_weights("damage_classifier.weights.h5")
+
 print("✅ Damage classifier loaded")
 
 # ======================================================
