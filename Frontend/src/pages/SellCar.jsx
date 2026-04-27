@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const API = import.meta.env.VITE_API_URL;
-fetch(`${API}/predict-model`, { method: "POST", body: formData })
 
 export default function SellCar() {
   const { user } = useAuth();
