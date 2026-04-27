@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
-const API = import.meta.env.VITE_API_URL;
+const API = "http://127.0.0.1:5000";
 
 export default function SellCar() {
   const { user } = useAuth();
@@ -32,14 +32,19 @@ export default function SellCar() {
   };
 
   const detectModel = async () => {
-  const data = new FormData();
-  images.forEach(img => data.append("images", img));
+    setLoading("Detecting model...");
+    const data = new FormData();
+    images.forEach(img => data.append("images", img));
 
-  const res = await fetch(`${API}/predict-model`, {
-    method: "POST",
-    body: data
-  });
-};
+    const res = await fetch(`${API}/predict-model`, {
+      method: "POST",
+      body: data
+    });
+
+    const result = await res.json();
+    setPredictedModel(result.predicted_model);
+    setLoading("");
+  };
 
   const verifyVin = async () => {
     setLoading("Verifying VIN...");
