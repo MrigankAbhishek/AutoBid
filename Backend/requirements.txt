@@ -1,0 +1,9 @@
+flask
+flask-cors
+tensorflow==2.13.0
+numpy
+pandas
+joblib
+werkzeug
+Pillow
+gunicorn
