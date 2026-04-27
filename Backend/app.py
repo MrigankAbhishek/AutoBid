@@ -46,7 +46,7 @@ download_models()
 
 app = Flask(__name__)
 CORS(app, origins=[
-    "https://autobid-mrigank.vercel.app",  # update after Vercel deploy
+    "https://auto-4ud8xh4rz-mrigankabhisheks-projects.vercel.app/",
     "http://localhost:5173"
 ])
 
