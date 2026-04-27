@@ -46,7 +46,7 @@ download_models()
 
 app = Flask(__name__)
 CORS(app, origins=[
-    "https://auto-bid-mrigankabhisheks-projects.vercel.app/",
+    "https://auto-bid-nine.vercel.app",  # ← your real Vercel URL
     "http://localhost:5173"
 ])
 
