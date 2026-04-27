@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const API = import.meta.env.VITE_API_URL;
-fetch(`${API}/predict-model`, { method: "POST", body: formData })
 
 export default function SellCar() {
   const { user } = useAuth();
@@ -33,19 +32,14 @@ export default function SellCar() {
   };
 
   const detectModel = async () => {
-    setLoading("Detecting model...");
-    const data = new FormData();
-    images.forEach(img => data.append("images", img));
+  const data = new FormData();
+  images.forEach(img => data.append("images", img));
 
-    const res = await fetch(`${API}/predict-model`, {
-      method: "POST",
-      body: data
-    });
-
-    const result = await res.json();
-    setPredictedModel(result.predicted_model);
-    setLoading("");
-  };
+  const res = await fetch(`${API}/predict-model`, {
+    method: "POST",
+    body: data
+  });
+};
 
   const verifyVin = async () => {
     setLoading("Verifying VIN...");
