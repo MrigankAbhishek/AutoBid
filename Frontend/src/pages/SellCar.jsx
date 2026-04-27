@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
-const API = "http://127.0.0.1:5000";
+const API = import.meta.env.VITE_API_URL;
+fetch(`${API}/predict-model`, { method: "POST", body: formData })
 
 export default function SellCar() {
   const { user } = useAuth();
