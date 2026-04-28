@@ -24,7 +24,8 @@ HF_BASE = "https://huggingface.co/Tenyson95/autobid-models/resolve/main"
 MODEL_FILES = [
     "car_classifier_weights.h5",
     "damage_classifier.weights.h5",
-    "alto800_base_model.pkl",
+    "car_price_model.pkl",      # ✅ MULTI-CAR MODEL
+    "car_model_meta.json",      # ✅ IMPORTANT
     "class_indices.json",
     "damage_class_indices.json",
 ]
@@ -36,7 +37,7 @@ def download_models():
             urllib.request.urlretrieve(f"{HF_BASE}/{filename}", filename)
             print(f"✅ {filename} downloaded")
         else:
-            print(f"✅ {filename} already exists, skipping.")
+            print(f"✅ {filename} already exists")
 
 download_models()
 
@@ -46,7 +47,7 @@ download_models()
 
 app = Flask(__name__)
 CORS(app, origins=[
-    "https://auto-bid-nine.vercel.app",  # ← your real Vercel URL
+    "https://auto-bid-nine.vercel.app",
     "http://localhost:5173"
 ])
 
@@ -63,11 +64,7 @@ with open("class_indices.json", "r") as f:
     class_map = json.load(f)
 
 def build_car_model(num_classes):
-    base_model = EfficientNetB0(
-        weights=None,
-        include_top=False,
-        input_shape=(IMG_SIZE, IMG_SIZE, 3)
-    )
+    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(IMG_SIZE, IMG_SIZE, 3))
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = BatchNormalization()(x)
@@ -77,10 +74,9 @@ def build_car_model(num_classes):
     outputs = Dense(num_classes, activation='softmax', dtype='float32')(x)
     return Model(inputs=base_model.input, outputs=outputs)
 
-num_classes = len(class_map)
-car_model = build_car_model(num_classes)
+car_model = build_car_model(len(class_map))
 car_model.load_weights("car_classifier_weights.h5")
-print("✅ Car classifier loaded successfully")
+print("✅ Car classifier loaded")
 
 # ======================================================
 # LOAD DAMAGE MODEL
@@ -89,41 +85,32 @@ print("✅ Car classifier loaded successfully")
 with open("damage_class_indices.json", "r") as f:
     damage_class_map = json.load(f)
 
+damage_classes = list(damage_class_map.keys())
+
 def build_damage_model(num_classes):
-    base_model = EfficientNetB0(
-        weights="imagenet",
-        include_top=False,
-        input_shape=(IMG_SIZE, IMG_SIZE, 3)
-    )
-
+    base_model = EfficientNetB0(weights="imagenet", include_top=False, input_shape=(IMG_SIZE, IMG_SIZE, 3))
     base_model.trainable = False
-
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = Dropout(0.4)(x)
     outputs = Dense(num_classes, activation='softmax')(x)
-
     return Model(inputs=base_model.input, outputs=outputs)
 
-
-# LOAD CLASS MAP
-with open("damage_class_indices.json", "r") as f:
-    damage_class_map = json.load(f)
-
-damage_classes = list(damage_class_map.keys())
-
-# BUILD + LOAD WEIGHTS
 damage_model = build_damage_model(len(damage_classes))
 damage_model.load_weights("damage_classifier.weights.h5")
-
 print("✅ Damage classifier loaded")
 
 # ======================================================
 # LOAD PRICE MODEL
 # ======================================================
 
-price_model = joblib.load("alto800_base_model.pkl")
-print("✅ Alto 800 price model loaded")
+price_model = joblib.load("car_price_model.pkl")
+print("✅ Multi-car price model loaded")
+
+with open("car_model_meta.json", "r") as f:
+    car_meta = json.load(f)
+
+print("✅ Metadata loaded")
 
 # ======================================================
 # VIN DECODER
@@ -155,11 +142,19 @@ def prepare_image(filepath):
     img = image.load_img(filepath, target_size=(IMG_SIZE, IMG_SIZE))
     img_array = image.img_to_array(img)
     img_array = preprocess_input(img_array)
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
+    return np.expand_dims(img_array, axis=0)
 
 def calculate_penalty(dents, scratches):
     return (dents * 0.02) + (scratches * 0.01)
+
+def parse_make_model(predicted_model_str):
+    known_makes = sorted(car_meta["make_model_map"].keys(), key=len, reverse=True)
+    for make in known_makes:
+        if predicted_model_str.lower().startswith(make.lower()):
+            model_part = predicted_model_str[len(make):].strip()
+            return make, model_part
+    parts = predicted_model_str.split(" ", 1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
 
 # ======================================================
 # ROUTES
@@ -174,77 +169,141 @@ def predict_model():
     files = request.files.getlist("images")
     if len(files) < 4:
         return jsonify({"error": "Upload 4 images"}), 400
+
     filepath = os.path.join(UPLOAD_FOLDER, secure_filename(files[0].filename))
     files[0].save(filepath)
+
     img = prepare_image(filepath)
     pred = car_model.predict(img)
     index = np.argmax(pred)
+
     predicted_model = class_map[str(index)]
+
     os.remove(filepath)
+
     return jsonify({"predicted_model": predicted_model})
 
 @app.route("/verify-vin", methods=["POST"])
 def verify_vin():
     vin = request.json.get("vin")
     predicted_model = request.json.get("predicted_model")
+
     vin_data = decode_indian_vin(vin)
     if not vin_data["valid"]:
         return jsonify(vin_data), 400
+
     manufacturer = vin_data["manufacturer"]
     year = vin_data["year"]
+
     verified = manufacturer.lower() in predicted_model.lower()
-    return jsonify({"manufacturer": manufacturer, "year": year, "verified": verified})
+
+    return jsonify({
+        "manufacturer": manufacturer,
+        "year": year,
+        "verified": verified
+    })
+
+# ======================================================
+# 🔥 MULTI-CAR PRICE ENDPOINT (FIXED)
+# ======================================================
 
 @app.route("/analyze-damage-price", methods=["POST"])
 def analyze_damage_price():
-    model_name = request.form.get("model")
-    if not model_name or "alto" not in model_name.lower():
-        return jsonify({"error": "Price model available only for Alto 800"}), 400
-    if not request.form.get("year") or not request.form.get("km"):
-        return jsonify({"error": "Year and KM are required"}), 400
-    try:
-        year = int(request.form.get("year"))
-        km = int(request.form.get("km"))
-    except:
-        return jsonify({"error": "Invalid year or KM value"}), 400
+
+    # 🔥 GET INPUT
+    raw_model = request.form.get("model", "").strip()
+    make = request.form.get("make", "").strip()
+    model_name = ""
+
+    # 🔥 AUTO PARSE (handles "Hyundai Creta")
+    if raw_model:
+        make, model_name = parse_make_model(raw_model)
+
+    # 🔥 FINAL VALIDATION
+    if not make or not model_name:
+        return jsonify({
+            "error": f"Invalid model format: '{raw_model}'"
+        }), 400
+
+    year = int(request.form.get("year"))
+    km = int(request.form.get("km"))
     fuel = request.form.get("fuel")
     transmission = request.form.get("transmission")
     city = request.form.get("city")
-    if not fuel or not transmission or not city:
-        return jsonify({"error": "Fuel, transmission and city are required"}), 400
-    files = request.files.getlist("images")
+
+    # DAMAGE
     dents = 0
     scratches = 0
+
+    files = request.files.getlist("images")
+
     for file in files:
-        filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
-        file.save(filepath)
-        img = prepare_image(filepath)
+        path = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
+        file.save(path)
+
+        img = prepare_image(path)
         pred = damage_model.predict(img)
-        index = np.argmax(pred)
-        damage_type = damage_classes[index]
-        if damage_type == "dent":
+        idx = np.argmax(pred)
+
+        if damage_classes[idx] == "dent":
             dents += 1
-        elif damage_type == "scratch":
+        elif damage_classes[idx] == "scratch":
             scratches += 1
-        os.remove(filepath)
+
+        os.remove(path)
+
+    # =============================
+    # 🔥 EXACT TRAINING FEATURES
+    # =============================
+
     current_year = datetime.now().year
     car_age = current_year - year
-    input_data = pd.DataFrame([{
-        "car_age": car_age,
-        "km_driven": km,
+    km_per_year = km / (car_age + 1)
+
+    resale_map = {
+        "Toyota": 1.25,
+        "Hyundai": 1.20,
+        "Maruti Suzuki": 1.18,
+        "Honda": 1.15,
+        "Mahindra": 1.12,
+        "Tata": 1.10,
+    }
+
+    resale_score = resale_map.get(make, 1.0)
+
+    model_counts = car_meta.get("model_counts", {})
+    max_count = max(model_counts.values()) if model_counts else 1
+    model_popularity = model_counts.get(model_name, 1) / max_count
+
+    input_df = pd.DataFrame([{
+        "make": make,
+        "model": model_name,
         "fuel": fuel,
         "transmission": transmission,
-        "city": city
+        "city": city,
+        "car_age": car_age,
+        "km_driven": km,
+        "km_per_year": km_per_year,
+        "resale_score": resale_score,
+        "model_popularity": model_popularity
     }])
-    base_price = float(price_model.predict(input_data)[0])
+
+    log_price = price_model.predict(input_df)[0]
+    base_price = float(np.expm1(log_price))
+
     penalty = calculate_penalty(dents, scratches)
     final_price = base_price * (1 - penalty)
+
     return jsonify({
+        "make": make,
+        "model": model_name,
+        "base_price": round(base_price),
+        "final_price": round(final_price),
         "dents": dents,
         "scratches": scratches,
-        "base_price": base_price,
-        "final_price": final_price
+        "penalty_pct": round(penalty * 100, 2)
     })
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860, debug=False)

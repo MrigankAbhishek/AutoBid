@@ -1,120 +1,179 @@
 import pandas as pd
 import numpy as np
 import joblib
+import json
 from datetime import datetime
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
+
+from xgboost import XGBRegressor
 
 # ==========================================
-# 1. ROBUST LOAD (Fixes "Expected X fields" Error)
+# LOAD DATA
 # ==========================================
-csv_file = 'raw_prices.csv'
-
-try:
-    # Try 1: Standard load with Latin1
-    df = pd.read_csv(csv_file, encoding='latin1')
-except:
-    try:
-        print("⚠️ Standard load failed. Trying Python engine with auto-separator...")
-        # Try 2: Python engine is smarter at detecting separators
-        df = pd.read_csv(csv_file, sep=None, engine='python', encoding='latin1')
-    except:
-        print("⚠️ Auto-sep failed. Skipping bad lines...")
-        # Try 3: Brute force - skip lines that don't match
-        # Note: on_bad_lines='skip' requires pandas >= 1.3. 
-        # For older versions use error_bad_lines=False
-        try:
-             df = pd.read_csv(csv_file, encoding='latin1', on_bad_lines='skip')
-        except:
-             df = pd.read_csv(csv_file, encoding='latin1', error_bad_lines=False)
-
-print(f"✅ Loaded Data: {len(df)} rows found.")
-print(f"Columns found: {list(df.columns)}")
-
-# Clean column names
+df = pd.read_csv("indian_cars_dataset_final.csv")
 df.columns = df.columns.str.strip().str.lower()
 
+print(f"✅ Loaded: {len(df)} rows")
+
 # ==========================================
-# 2. FILTER & PREPROCESS
+# CLEAN
 # ==========================================
 df = df.drop_duplicates().dropna()
 
-# Filter for Alto 800 if mixed data exists
-if 'model' in df.columns:
-    # Remove 'Alto 800' string to allow fuzzy matching if needed, or keep strictly
-    df = df[df['model'].astype(str).str.contains('Alto 800', case=False, na=False)]
+df["year"] = pd.to_numeric(df["year"], errors="coerce")
+df["km_driven"] = pd.to_numeric(df["km_driven"], errors="coerce")
+df["base_price"] = pd.to_numeric(df["base_price"], errors="coerce")
 
-# Remove outliers / weird values
-# Ensure columns are numeric
-df['km_driven'] = pd.to_numeric(df['km_driven'], errors='coerce')
-df = df.dropna(subset=['km_driven'])
-df = df[df["km_driven"] < 300000]
+df = df.dropna(subset=["year", "km_driven", "base_price"])
 
-# flexible price column check
-price_col = 'base_price' if 'base_price' in df.columns else 'price'
+df = df[df["km_driven"] < 350000]
+df = df[df["base_price"].between(50000, 25000000)]
 
-if price_col not in df.columns:
-    print(f"❌ CRITICAL ERROR: Could not find 'price' or 'base_price' column.")
-    print(f"Available columns: {df.columns.tolist()}")
-    exit()
+print(f"✅ Clean dataset: {len(df)} rows")
 
-# Ensure price is numeric
-df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
-df = df.dropna(subset=[price_col])
-df = df[df[price_col].between(50000, 500000)]
-
-# Feature Engineering
+# ==========================================
+# FEATURE ENGINEERING
+# ==========================================
 current_year = datetime.now().year
-df['year'] = pd.to_numeric(df['year'], errors='coerce')
+
 df["car_age"] = current_year - df["year"]
+df["km_per_year"] = df["km_driven"] / (df["car_age"] + 1)
+
+# ------------------------------------------
+# 🔥 RESALE SCORE (VERY IMPORTANT)
+# ------------------------------------------
+resale_map = {
+    "Toyota": 1.25,
+    "Hyundai": 1.20,
+    "Maruti Suzuki": 1.18,
+    "Honda": 1.15,
+    "Mahindra": 1.12,
+    "Tata": 1.10,
+}
+
+df["resale_score"] = df["make"].map(resale_map).fillna(1.0)
+
+# ------------------------------------------
+# 🔥 MODEL POPULARITY (DATA-DRIVEN)
+# ------------------------------------------
+model_counts = df["model"].value_counts()
+df["model_popularity"] = df["model"].map(model_counts)
+
+# normalize
+df["model_popularity"] = df["model_popularity"] / df["model_popularity"].max()
+
+# ------------------------------------------
+# LOG TARGET
+# ------------------------------------------
+df["log_price"] = np.log1p(df["base_price"])
 
 # ==========================================
-# 3. DEFINE FEATURES
+# FEATURES
 # ==========================================
-features = ["car_age", "km_driven", "fuel", "transmission", "city"]
-
-# Validate columns exist
-missing = [f for f in features if f not in df.columns]
-if missing:
-    # Try to fix common name mismatches
-    if 'fuel ' in df.columns: df.rename(columns={'fuel ': 'fuel'}, inplace=True)
-    if 'source' in df.columns: df.rename(columns={'source': 'city'}, inplace=True) 
-    
-    # Check again
-    missing = [f for f in features if f not in df.columns]
-    if missing:
-        print(f"❌ Still missing columns: {missing}")
-        exit()
+features = [
+    "make",
+    "model",
+    "fuel",
+    "transmission",
+    "city",
+    "car_age",
+    "km_driven",
+    "km_per_year",
+    "resale_score",        # NEW
+    "model_popularity"     # NEW
+]
 
 X = df[features]
-y = df[price_col]
-
-print(f"✅ Training on {len(df)} cleaned records...")
+y = df["log_price"]
 
 # ==========================================
-# 4. BUILD & TRAIN PIPELINE
+# PREPROCESSOR
 # ==========================================
-categorical_features = ["fuel", "transmission", "city"]
+categorical = ["make", "model", "fuel", "transmission", "city"]
+
 preprocessor = ColumnTransformer(
-    transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features)],
+    transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical)
+    ],
     remainder="passthrough"
 )
 
-model = Pipeline(steps=[
+# ==========================================
+# MODEL (IMPROVED XGBOOST)
+# ==========================================
+model = Pipeline([
     ("preprocessor", preprocessor),
-    ("regressor", RandomForestRegressor(n_estimators=500, max_depth=15, random_state=42))
+    ("regressor", XGBRegressor(
+        n_estimators=500,
+        max_depth=8,
+        learning_rate=0.05,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        reg_alpha=0.5,
+        reg_lambda=1.0,
+        tree_method="hist",
+        random_state=42
+    ))
 ])
 
-model.fit(X, y)
+# ==========================================
+# TRAIN
+# ==========================================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.15, random_state=42
+)
+
+print(f"\n⏳ Training on {len(X_train)} samples...")
+model.fit(X_train, y_train)
 
 # ==========================================
-# 5. SAVE
+# PREDICT
 # ==========================================
-joblib.dump(model, "alto800_base_model.pkl")
+log_preds = model.predict(X_test)
 
-print("\n🚀 Success! 'alto800_base_model.pkl' created.")
-print(f"Stats - MAE: ₹{round(mean_absolute_error(y, model.predict(X)), 2)}")
+preds = np.expm1(log_preds)
+y_true = np.expm1(y_test)
+
+# ==========================================
+# METRICS
+# ==========================================
+mae = mean_absolute_error(y_true, preds)
+r2  = r2_score(y_true, preds)
+mape = np.mean(np.abs((y_true - preds) / y_true)) * 100
+
+print(f"\n📊 Final Results:")
+print(f"   MAE  : ₹{mae:,.0f}")
+print(f"   R²   : {r2:.4f}")
+print(f"   MAPE : {mape:.2f}%")
+
+# ==========================================
+# SAVE
+# ==========================================
+joblib.dump(model, "car_price_model.pkl")
+print("\n🚀 Model saved → car_price_model.pkl")
+
+model_counts = df["model"].value_counts().to_dict()
+
+meta = {
+    "makes": sorted(df["make"].unique().tolist()),
+    "models": sorted(df["model"].unique().tolist()),
+    "fuels": sorted(df["fuel"].unique().tolist()),
+    "transmissions": sorted(df["transmission"].unique().tolist()),
+    "cities": sorted(df["city"].unique().tolist()),
+    "make_model_map": (
+        df.groupby("make")["model"]
+        .apply(lambda x: sorted(x.unique().tolist()))
+        .to_dict()
+    ),
+    "model_counts": model_counts   # 🔥 ADD THIS
+}
+
+with open("car_model_meta.json", "w") as f:
+    json.dump(meta, f, indent=2)
+
+print("📋 Metadata saved → car_model_meta.json")
