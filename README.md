@@ -15,6 +15,13 @@ AutoBid automates the used car valuation process using three custom-trained ML m
 
 ## Screenshots
 
+![Home](https://raw.githubusercontent.com/MrigankAbhishek/AutoBid/main/screenshots/Screenshot%202026-06-15%20120752.png)
+
+![Page2](https://raw.githubusercontent.com/MrigankAbhishek/AutoBid/main/screenshots/Screenshot%202026-06-15%20120800.png)
+
+![Page3](https://raw.githubusercontent.com/MrigankAbhishek/AutoBid/main/screenshots/Screenshot%202026-06-15%20121144.png)
+
+![Page4](https://raw.githubusercontent.com/MrigankAbhishek/AutoBid/main/screenshots/Screenshot%202026-06-15%20121446.png)
 
 ---
 
