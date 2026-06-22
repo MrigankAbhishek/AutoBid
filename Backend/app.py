@@ -204,22 +204,19 @@ def verify_vin():
     })
 
 # ======================================================
-# 🔥 MULTI-CAR PRICE ENDPOINT (FIXED)
+# MULTI-CAR PRICE ENDPOINT 
 # ======================================================
 
 @app.route("/analyze-damage-price", methods=["POST"])
 def analyze_damage_price():
 
-    # 🔥 GET INPUT
     raw_model = request.form.get("model", "").strip()
     make = request.form.get("make", "").strip()
     model_name = ""
 
-    # 🔥 AUTO PARSE (handles "Hyundai Creta")
     if raw_model:
         make, model_name = parse_make_model(raw_model)
 
-    # 🔥 FINAL VALIDATION
     if not make or not model_name:
         return jsonify({
             "error": f"Invalid model format: '{raw_model}'"
@@ -231,7 +228,6 @@ def analyze_damage_price():
     transmission = request.form.get("transmission")
     city = request.form.get("city")
 
-    # DAMAGE
     dents = 0
     scratches = 0
 
@@ -253,7 +249,7 @@ def analyze_damage_price():
         os.remove(path)
 
     # =============================
-    # 🔥 EXACT TRAINING FEATURES
+    # TRAINING FEATURES
     # =============================
 
     current_year = datetime.now().year
